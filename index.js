@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const app = express();
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 const port = process.env.PORT || 5000;
 
@@ -35,12 +35,43 @@ async function run() {
 
 
     // users related apis
+    app.get('/users', async(req, res) => {
+      const result = await userCollections.find().toArray();
+      res.send(result);
+    })
+
     app.post('/users', async(req, res) => {
       const user = req.body;
+      // insert email if user doesnt exists
+      const query = {email: user.email};
+      const existingUser = await userCollections.findOne(query)
+      if(existingUser){
+        return res.send({message: 'user already exists', insertedId: null})
+      }
       const result = await userCollections.insertOne(user);
       res.send(result);
     })
 
+    app.patch('/users/admin/:id', async(req, res) => {
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)};
+      const updatedDoc = {
+        $set: {
+          role: 'admin'
+        }
+      }
+      const result = await userCollections.updateOne(filter, updatedDoc);
+      res.send(result);
+    })
+
+    app.delete('/users/:id', async(req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await userCollections.deleteOne(query);
+      res.send(result);
+    })
+
+    // menu related apis
     app.get('/menu', async(req, res) => {
         const result = await menuCollections.find().toArray();
         res.send(result);
@@ -66,6 +97,13 @@ async function run() {
       const cartItem = req.body;
       const result = await cartCollections.insertOne(cartItem);
       res.send(result)
+    })
+
+    app.delete('/carts/:id', async(req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await cartCollections.deleteOne(query);
+      res.send(result);
     })
 
     console.log(
