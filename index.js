@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const app = express();
+const jwt = require("jsonwebtoken");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cors = require("cors");
 const port = process.env.PORT || 5000;
@@ -9,9 +10,7 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-
-const uri =
-  `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.iwlha.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.iwlha.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -28,83 +27,105 @@ async function run() {
     // await client.connect();
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
-    const userCollections = client.db('bistroDb').collection('users');
-    const menuCollections = client.db('bistroDb').collection('menu');
-    const reviewCollections = client.db('bistroDb').collection('reviews')
-    const cartCollections = client.db('bistroDb').collection('carts')
+    const userCollections = client.db("bistroDb").collection("users");
+    const menuCollections = client.db("bistroDb").collection("menu");
+    const reviewCollections = client.db("bistroDb").collection("reviews");
+    const cartCollections = client.db("bistroDb").collection("carts");
 
+
+    // jwt related apis
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "1h",
+      });
+      res.send({ token });
+    });
+
+    // middleWare 
+    const verifyToken = (req, res, next) => {
+      console.log('inside verify token', req.headers.authorization);
+      if(!req.headers.authorization){
+        return res.status(401).send({message: 'forbidden access'});
+      }
+      const token = req.headers.authorization.split(' ')[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (error, decoded) => {
+        if(error){
+          return res.status(401).send({message: 'forbidden access'})
+        }
+        req.decoded = decoded
+        next()
+      })
+    }
 
     // users related apis
-    app.get('/users', async(req, res) => {
+    app.get("/users", verifyToken, async (req, res) => {
       const result = await userCollections.find().toArray();
       res.send(result);
-    })
+    });
 
-    app.post('/users', async(req, res) => {
+    app.post("/users", async (req, res) => {
       const user = req.body;
       // insert email if user doesnt exists
-      const query = {email: user.email};
-      const existingUser = await userCollections.findOne(query)
-      if(existingUser){
-        return res.send({message: 'user already exists', insertedId: null})
+      const query = { email: user.email };
+      const existingUser = await userCollections.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "user already exists", insertedId: null });
       }
       const result = await userCollections.insertOne(user);
       res.send(result);
-    })
+    });
 
-    app.patch('/users/admin/:id', async(req, res) => {
+    app.patch("/users/admin/:id", async (req, res) => {
       const id = req.params.id;
-      const filter = {_id: new ObjectId(id)};
+      const filter = { _id: new ObjectId(id) };
       const updatedDoc = {
         $set: {
-          role: 'admin'
-        }
-      }
+          role: "admin",
+        },
+      };
       const result = await userCollections.updateOne(filter, updatedDoc);
       res.send(result);
-    })
+    });
 
-    app.delete('/users/:id', async(req, res) => {
+    app.delete("/users/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await userCollections.deleteOne(query);
       res.send(result);
-    })
+    });
 
     // menu related apis
-    app.get('/menu', async(req, res) => {
-        const result = await menuCollections.find().toArray();
-        res.send(result);
-    })
+    app.get("/menu", async (req, res) => {
+      const result = await menuCollections.find().toArray();
+      res.send(result);
+    });
 
-    app.get('/review', async(req, res) => {
-        const result = await reviewCollections.find().toArray();
-        res.send(result);
-    })
+    app.get("/review", async (req, res) => {
+      const result = await reviewCollections.find().toArray();
+      res.send(result);
+    });
 
     // carts collection
-    app.get('/carts', async(req, res) => {
+    app.get("/carts", async (req, res) => {
       const email = req.query.email;
-      console.log("get email", email);
-      const query = {email: email};
-      console.log(query);
+      const query = { email: email };
       const result = await cartCollections.find(query).toArray();
       res.send(result);
-      console.log(result);
-    })
+    });
 
-    app.post('/carts', async(req, res) => {
+    app.post("/carts", async (req, res) => {
       const cartItem = req.body;
       const result = await cartCollections.insertOne(cartItem);
-      res.send(result)
-    })
+      res.send(result);
+    });
 
-    app.delete('/carts/:id', async(req, res) => {
+    app.delete("/carts/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await cartCollections.deleteOne(query);
       res.send(result);
-    })
+    });
 
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
