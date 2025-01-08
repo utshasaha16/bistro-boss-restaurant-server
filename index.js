@@ -130,6 +130,12 @@ async function run() {
       res.send(result);
     });
 
+    app.post("/menu", verifyToken, verifyAdmin, async (req, res) => {
+      const item = req.body;
+      const result = await menuCollections.insertOne(item);
+      res.send(result);
+    })
+
     app.get("/review", async (req, res) => {
       const result = await reviewCollections.find().toArray();
       res.send(result);
