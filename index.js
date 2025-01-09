@@ -230,7 +230,80 @@ async function run() {
       }};
       const deleteResult = await cartCollections.deleteMany(query);
       res.send({paymentResult, deleteResult});
+    });
+
+    // stats or analytics
+    app.get("/admin-stats", verifyToken, verifyAdmin, async(req, res) => {
+      const users = await userCollections.estimatedDocumentCount();
+      const menuItems = await menuCollections.estimatedDocumentCount();
+      const orders = await paymentCollections.estimatedDocumentCount();
+
+      // this is not the best way
+      // const payments = await paymentCollections.find().toArray();
+      // const revenue = payments.reduce( (total, payment) => total + payment.price , 0);
+
+      // this is the best way
+      const result = await paymentCollections.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalRevenue: {
+              $sum: '$price'
+            }
+          }
+        }
+      ]).toArray();
+      const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+
+      res.send({
+        users,
+        menuItems,
+        orders,
+        revenue
+      });
     })
+
+    // using aggregate pipeline
+    app.get("/order-stats", verifyToken, verifyAdmin, async(req, res) => {
+      const result = await paymentCollections.aggregate([
+        {
+          $unwind: '$menuItemIds'
+        },
+        {
+          $lookup: {
+            from: 'menu',
+            localField: 'menuItemIds',
+            foreignField: '_id',
+            as: 'menuItems'
+          }
+        },
+        {
+          $unwind: '$menuItems'
+        },
+        {
+          $group: {
+            _id: '$menuItems.category',
+            quantity: {
+              $sum: 1
+            },
+            revenue: {
+              $sum: '$menuItems.price'
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            category: '$_id',
+            quantity: '$quantity',
+            revenue: '$revenue'
+          }
+        }
+      ]).toArray();
+
+      res.send(result);
+    })
+    
 
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
